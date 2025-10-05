@@ -3,105 +3,93 @@
 import joblib
 import os
 import requests
-import base64
 from feature_extractor import extract_features
 
 def fetch_github_blocklist(token):
     """
     Fetches the list of active phishing URLs from the Phishing.Database repository.
-    Returns a set of URLs for fast checking.
     """
-    # This is the correct API URL to use your token with.
     api_url = "https://api.github.com/repos/Phishing-Database/Phishing.Database/contents/phishing-links-ACTIVE.txt"
-    
-    # Using the .raw media type gets the file content directly without Base64 encoding.
     headers = {
         "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github.v3.raw" 
+        "Accept": "application/vnd.github.v3.raw"
     }
-    
     print("Fetching latest blocklist from GitHub...")
     try:
         response = requests.get(api_url, headers=headers)
-        # This will raise an error for bad responses (e.g., 401 Unauthorized for a bad token)
         response.raise_for_status()
-        
-        # Split the text content into a list of lines, removing any empty ones.
         url_list = [line for line in response.text.splitlines() if line]
-        
-        # A 'set' is much faster than a 'list' for checking if an item exists.
         blocklist_set = set(url_list)
         print(f"✅ Successfully fetched {len(blocklist_set)} unique URLs for the blocklist.")
         return blocklist_set
-
     except requests.exceptions.RequestException as e:
         print(f"❌ Error fetching blocklist from GitHub: {e}")
-        print("Continuing without the GitHub blocklist. Predictions will rely only on the ML model.")
-        return set() # Return an empty set on failure so the program doesn't crash
+        return set()
 
 
-def predict_url_status(url, model, blocklist, feature_order):
+def analyze_and_present(url, model, blocklist, features, feature_order):
     """
-    Checks a URL first against the blocklist, then uses the ML model if not found.
+    Analyzes the URL and presents the findings in the required format.
     """
-    print("-" * 50)
+    is_on_blocklist = url in blocklist
+
+    # Get the model's prediction and probabilities regardless of blocklist status
+    feature_list = [features[col] for col in feature_order]
+    probabilities = model.predict_proba([feature_list])[0]
+    prob_phishing = probabilities[1]
+    prob_legitimate = probabilities[0]
+    model_prediction_is_phishing = prob_phishing > 0.5
+
+    # The final verdict is PHISHING if the blocklist says so OR if the model says so.
+    final_verdict_is_phishing = is_on_blocklist or model_prediction_is_phishing
+
+    print("-" * 60)
     print(f"🔎 Analyzing URL: {url}")
 
-    # Step 1: Pre-check against the GitHub blocklist (very fast)
-    if url in blocklist:
-        print("❗️ Result: PHISHING (Found on GitHub blocklist)")
-        return 1  # 1 indicates Phishing
-        
-    # Step 2: If not on the blocklist, analyze with your ML model
-    print("➡️ URL not on blocklist. Analyzing with ML model...")
-    try:
-        # Extract features using your existing function
-        features_dict = extract_features(url)
-        
-        # IMPORTANT: Create the feature list in the exact order the model was trained on
-        feature_list = [features_dict[col] for col in feature_order]
-        
-        # Predict using the loaded model
-        prediction = model.predict([feature_list])
-        
-        if prediction[0] == 1:
-            print("❗️ Result: PHISHING (Predicted by ML model)")
-        else:
-            print("✅ Result: LEGITIMATE (Predicted by ML model)")
-            
-        return prediction[0]
+    if is_on_blocklist:
+        print("\n❗️ Pre-check Result: PHISHING (Found on GitHub blocklist)")
 
-    except Exception as e:
-        print(f"❌ Could not analyze URL with ML model. Error: {e}")
-        return -1 # Represents an error or unknown status
+    print("\n🤖 Machine Learning Model Analysis:")
+
+    if final_verdict_is_phishing:
+        print(f"    - Probability of Phishing: {prob_phishing:.2%}")
+        print("\n  Result: Phishing")
+        print("  Reasoning (Phishing features detected with a value of 1):")
+        # Find all features with a "risky" value (greater than 0)
+        risky_features = [f for f in feature_order if features.get(f, 0) > 0]
+        if not risky_features:
+            print("    - No single dominant phishing feature found; verdict based on a combination of factors.")
+        else:
+            for feature in risky_features:
+                print(f"    - {feature}")
+    else: # Benign
+        print(f"    - Probability of Phishing: {prob_phishing:.2%}")
+        print(f"    - Probability of Legitimate: {prob_legitimate:.2%}")
+        print("\n  Result: Benign")
+        # --- THIS IS THE LINE THAT HAS BEEN CHANGED ---
+        print("  Reasoning (Benign features detected with a value of -1):")
+        # Find all features with a "safe" value (equal to 0)
+        safe_features = [f for f in feature_order if features.get(f, 0) == 0]
+        for feature in safe_features[:5]: # Show the first 5 for brevity
+            print(f"    - {feature}")
 
 
 # --- Main Execution Block ---
 if __name__ == "__main__":
-    
-    # 🔐 For security, load your GitHub Token from an environment variable.
-    # Before running the script, open your terminal and execute:
-    # export GITHUB_TOKEN="paste_your_token_here"
     GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
-    
     if not GITHUB_TOKEN:
-        print("FATAL ERROR: The 'GITHUB_TOKEN' environment variable is not set.")
-        print("Please set it to your GitHub Personal Access Token to continue.")
+        print("FATAL ERROR: 'GITHUB_TOKEN' environment variable is not set.")
     else:
-        # 1. Fetch the live blocklist from GitHub using your token
         PHISHING_BLOCKLIST = fetch_github_blocklist(GITHUB_TOKEN)
-
-        # 2. Load your trained phishing model
         MODEL_PATH = 'phishing_model.pkl'
         if not os.path.exists(MODEL_PATH):
             print(f"FATAL ERROR: Model file not found at '{MODEL_PATH}'")
         else:
             phishing_model = joblib.load(MODEL_PATH)
-            print("🧠 Model 'phishing_model.joblib' loaded successfully.")
+            print(f"🧠 Model '{MODEL_PATH}' loaded successfully.")
 
-            # 3. This list of feature names MUST be in the same order as when you trained your model
             EXPECTED_FEATURE_ORDER = [
-                'PctExtHyperlinks', 'PctExtResourceUrls', 'PctNullSelfRedirectHyperlinks', 
+                'PctExtHyperlinks', 'PctExtResourceUrls', 'PctNullSelfRedirectHyperlinks',
                 'PctExtNullSelfRedirectHyperlinksRT', 'NumNumericChars', 'FrequentDomainNameMismatch',
                 'ExtMetaScriptLinkRT', 'NumDash', 'SubmitInfoToEmail', 'NumDots', 'PathLength',
                 'QueryLength', 'PathLevel', 'InsecureForms', 'UrlLength', 'NumSensitiveWords',
@@ -111,12 +99,17 @@ if __name__ == "__main__":
                 'MissingTitle', 'DomainInPaths', 'SubdomainLevel', 'ExtFormAction'
             ]
 
-            # --- Test with some example URLs ---
-            url_to_test_phishing = "http://0.0.0.0forum.cryptonight.net"
-            predict_url_status(url_to_test_phishing, phishing_model, PHISHING_BLOCKLIST, EXPECTED_FEATURE_ORDER)
+            # --- Test URLs ---
+            urls_to_test = [
+                "https://github.com/Gokul2027/AI-Phishing-Detection-Extension-work" 
+                
+            ]
 
-            url_to_test_legit = "https://www.google.com"
-            predict_url_status(url_to_test_legit, phishing_model, PHISHING_BLOCKLIST, EXPECTED_FEATURE_ORDER)
-
-            url_from_blocklist_test = "http://000agreementmail.weebly.com" # Replace with a URL from the list for testing
-            predict_url_status(url_from_blocklist_test, phishing_model, PHISHING_BLOCKLIST, EXPECTED_FEATURE_ORDER)
+            for test_url in urls_to_test:
+                try:
+                    extracted_features = extract_features(test_url)
+                    analyze_and_present(test_url, phishing_model, PHISHING_BLOCKLIST, extracted_features, EXPECTED_FEATURE_ORDER)
+                except Exception as e:
+                    print("-" * 60)
+                    print(f"🔎 Analyzing URL: {test_url}")
+                    print(f"\n❌ Could not process URL. Error: {e}")

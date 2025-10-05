@@ -63,8 +63,13 @@ def train_model(data, top_n):
     recall = recall_score(y_test, y_pred)
     f1 = f1_score(y_test, y_pred)
     accuracy = accuracy_score(y_test, y_pred)
+    print()
 
-    print("Precision:", precision, "Recall:", recall, "F1:", f1, "Accuracy:", accuracy)
+    print("Precision:", precision)
+    print("Recall:", recall)
+    print("F1:", f1)
+    print()
+    print("Accuracy:", accuracy)
 
     return model,top_n_features
 
