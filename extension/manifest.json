@@ -1,15 +1,16 @@
 {
   "manifest_version": 3,
   "name": "AI Phishing Detector",
-  "version": "1.0",
-  "description": "Uses a local AI model to detect potential phishing websites in real-time.",
+  "version": "2.0",
+  "description": "Automatically blocks phishing sites and allows on-demand analysis.",
   "permissions": ["scripting", "tabs"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "AI Phishing Detector"
+    "default_title": "AI Phishing Detector",
+    "default_popup": "popup.html"
   },
   "icons": {
     "128": "icon.png"

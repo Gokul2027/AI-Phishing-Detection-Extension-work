@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { width: 350px; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 15px; background-color: #f9f9f9; }
+        #container { text-align: center; }
+        #status-icon { font-size: 50px; margin-bottom: 10px; }
+        #status-text { font-size: 24px; font-weight: bold; margin: 0; }
+        .phishing { color: #d93025; }
+        .benign { color: #28a745; }
+        #probabilities { margin-top: 15px; font-size: 14px; color: #555; }
+        #read-more-btn { background: none; border: none; color: #007bff; cursor: pointer; font-size: 14px; margin-top: 15px; padding: 5px; }
+        #reasons { display: none; text-align: left; margin-top: 10px; padding: 10px; border: 1px solid #eee; border-radius: 5px; max-height: 150px; overflow-y: auto; background-color: #fff; }
+        #reasons ul { margin: 0; padding-left: 20px; }
+        #loading { font-style: italic; color: #888; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="status-icon"></div>
+        <h1 id="status-text">Analyzing...</h1>
+        <p id="loading">Getting analysis from the local server...</p>
+        <div id="probabilities"></div>
+        <button id="read-more-btn" style="display: none;">Read More...</button>
+        <div id="reasons"></div>
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html>
