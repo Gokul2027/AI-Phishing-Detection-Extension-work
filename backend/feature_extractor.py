@@ -19,11 +19,11 @@ def extract_features(url):
     ]}
 
     try:
+        # ---- URL-based Features (calculated regardless of connection) ----
         parsed = urlparse(url)
         hostname = parsed.hostname or ""
         path = parsed.path or ""
         
-        # URL-based features that can be calculated even if the site is dead
         features['NumNumericChars'] = sum(c.isdigit() for c in url)
         features['NumDash'] = url.count('-')
         features['NumDots'] = url.count('.')
@@ -34,8 +34,8 @@ def extract_features(url):
         features['HostnameLength'] = len(hostname)
         features['IpAddress'] = 1 if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", hostname) else 0
         features['EmbeddedBrandName'] = 1 if any(b in url.lower() for b in BRAND_NAMES) else 0
-        
-        # Content-based features - these require a successful connection
+
+        # ---- Content-based Features (requires a successful connection) ----
         resp = requests.get(url, timeout=5, headers={'User-Agent':'Mozilla/5.0'})
         html = resp.text
         soup = BeautifulSoup(html, "html.parser")
@@ -50,11 +50,10 @@ def extract_features(url):
             if action.startswith("http://"): features['InsecureForms'] = 1
             if urlparse(action).hostname and hostname not in action:
                 features['AbnormalFormAction'] = 1
-
+        
         return features
 
-    except Exception as e:
-        # On any failure (dead link, timeout, etc.), print the error and return None
+    except requests.exceptions.RequestException as e:
+        # On ANY network error, print it and explicitly return None.
         print(f"Error extracting content-based features for {url}: {e}")
-        # Return the URL-based features, as they are still valuable
-        return features
+        return None

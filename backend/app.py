@@ -12,29 +12,9 @@ CORS(app)
 
 # --- 2. Define the Expanded Allowlist of Safe Domains ---
 SAFE_DOMAINS = [
-    # Social Media
-    'facebook.com', 'twitter.com', 'x.com', 'instagram.com', 'linkedin.com',
-    'reddit.com', 'pinterest.com', 'tiktok.com', 'tumblr.com',
-
-    # E-commerce
-    'amazon.com', 'ebay.com', 'walmart.com', 'etsy.com', 'target.com',
-    'bestbuy.com', 'alibaba.com', 'aliexpress.com',
-
-    # Search Engines
-    'google.com', 'bing.com', 'yahoo.com', 'duckduckgo.com',
-
-    # News & Media
-    'bbc.com', 'nytimes.com', 'theguardian.com', 'reuters.com', 'cnn.com', 'forbes.com',
-
-    # Streaming & Entertainment
-    'youtube.com', 'netflix.com', 'spotify.com', 'twitch.tv', 'imdb.com',
-
-    # Productivity & Cloud Services
-    'microsoft.com', 'apple.com', 'office.com', 'dropbox.com',
-    'salesforce.com', 'adobe.com', 'zoom.us',
-
-    # Developer & Tech
-    'github.com', 'stackoverflow.com', 'wikipedia.org', 'medium.com', 'quora.com'
+    'google.com', 'youtube.com', 'twitter.com', 'x.com', 'facebook.com', 'instagram.com', 'linkedin.com', 'reddit.com',
+    'pinterest.com', 'tiktok.com', 'amazon.com', 'ebay.com', 'walmart.com', 'microsoft.com', 'apple.com', 'github.com',
+    'stackoverflow.com', 'wikipedia.org', 'phishtank.org'
 ]
 
 # --- 3. Load GitHub Token and Fetch Blocklist ---
@@ -45,7 +25,6 @@ def fetch_github_blocklist(token):
     if not token:
         print("⚠️ GITHUB_TOKEN not set. Skipping blocklist check.")
         return set()
-    
     api_url = "https://api.github.com/repos/Phishing-Database/Phishing.Database/contents/phishing-links-ACTIVE.txt"
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3.raw"}
     print("Fetching latest blocklist from GitHub...")
@@ -75,52 +54,79 @@ EXPECTED_FEATURE_ORDER = [
     'NumUnderscore', 'MissingTitle', 'DomainInPaths', 'SubdomainLevel', 'ExtFormAction'
 ]
 
-# --- 5. Create the API Endpoint for Analysis ---
+# --- 5. Helper function to print analysis to the terminal ---
+def print_analysis_to_terminal(analysis_data):
+    print("-" * 60)
+    print(f"🔎 Analyzing URL: {analysis_data['url']}")
+    if analysis_data.get('is_on_blocklist'):
+        print("\n❗️ Pre-check Result: PHISHING (Found on GitHub blocklist)")
+    if analysis_data.get('model_analysis_skipped'):
+        reason_text = f" ({analysis_data.get('reason', '')})" if analysis_data.get('reason') else ""
+        print(f"\n🤖 Machine Learning Model Analysis: SKIPPED{reason_text}")
+        print("-" * 60)
+        return
+    print("\n🤖 Machine Learning Model Analysis:")
+    if analysis_data['is_phishing']:
+        print(f"    - Probability of Phishing: {analysis_data['prob_phishing']}")
+        print("\n  Result: Phishing")
+        print("  Reasoning (Phishing features detected with a value of 1):")
+        if not analysis_data['risky_features']:
+            print("    - Verdict based on a combination of factors.")
+        else:
+            for feature in analysis_data['risky_features']:
+                print(f"    - {feature}")
+    else: # Benign
+        print(f"    - Probability of Phishing: {analysis_data['prob_phishing']}")
+        print(f"    - Probability of Legitimate: {analysis_data['prob_legitimate']}")
+        print("\n  Result: Benign")
+        print("  Reasoning (Benign features detected with a value of -1):")
+        for feature in analysis_data['safe_features'][:5]:
+            print(f"    - {feature}")
+    print("-" * 60)
+
+# --- 6. Create the API Endpoint for Analysis ---
 @app.route("/analyze", methods=["POST"])
 def analyze_url():
     payload = request.get_json()
     url = payload.get("url")
-    if not url:
-        return jsonify({"error": "URL not provided"}), 400
+    if not url: return jsonify({"error": "URL not provided"}), 400
 
     try:
-        # --- Allowlist Check ---
         hostname = urlparse(url).hostname
         if hostname and any(hostname.endswith(safe_domain) for safe_domain in SAFE_DOMAINS):
-            print(f"✔️ Allowlist HIT for {url}")
-            return jsonify({"is_phishing": False})
+            analysis_result = {"url": url, "is_phishing": False, "reason": "On Allowlist", "model_analysis_skipped": True, "safe_features": ["This domain is on the allowlist."], "prob_phishing": "0.00%", "prob_legitimate": "100.00%"}
+            print_analysis_to_terminal(analysis_result)
+            return jsonify(analysis_result)
 
-        # Stage 1: Check against the live blocklist
-        if url in PHISHING_BLOCKLIST:
-            print(f"✔️ Blocklist HIT for {url}")
-            return jsonify({
-                "url": url, "is_phishing": True,
-                "reasons": ["URL is present on a live phishing blocklist."]
-            })
-
-        # Stage 2: If not on blocklist, use the ML model
+        is_on_blocklist = url in PHISHING_BLOCKLIST
         features = extract_features(url)
+        
         if features is None:
-            print(f"⚠️ Warning: Feature extraction failed for {url}. Flagging as phishing by default.")
-            return jsonify({
-                "url": url, "is_phishing": True,
-                "reasons": ["Analysis failed because the site is unresponsive."]
-            })
+            analysis_result = {"url": url, "is_phishing": True, "is_on_blocklist": is_on_blocklist, "reason": "Site Unresponsive", "model_analysis_skipped": True, "risky_features": ["Site is unresponsive or actively blocking connections."], "prob_phishing": "100.00%"}
+            print_analysis_to_terminal(analysis_result)
+            return jsonify(analysis_result)
 
         feature_list = [features.get(col, 0) for col in EXPECTED_FEATURE_ORDER]
-        prediction = model.predict([feature_list])[0]
-        is_phishing = bool(prediction == 1)
-        reasons = [f for f in EXPECTED_FEATURE_ORDER if features.get(f, 0) > 0] if is_phishing else []
+        probabilities = model.predict_proba([feature_list])[0]
+        prob_phishing = probabilities[1]
+        model_prediction_is_phishing = prob_phishing > 0.5
+        final_verdict_is_phishing = is_on_blocklist or model_prediction_is_phishing
         
-        return jsonify({
-            "url": url, "is_phishing": is_phishing, "reasons": reasons
-        })
+        analysis_result = {
+            "url": url, "is_phishing": bool(final_verdict_is_phishing), "is_on_blocklist": bool(is_on_blocklist),
+            "prob_phishing": f"{prob_phishing:.2%}", "prob_legitimate": f"{probabilities[0]:.2%}",
+            "risky_features": [f for f in EXPECTED_FEATURE_ORDER if features.get(f, 0) > 0],
+            "safe_features": [f for f in EXPECTED_FEATURE_ORDER if features.get(f, 0) == 0]
+        }
+        
+        print_analysis_to_terminal(analysis_result)
+        return jsonify(analysis_result)
 
     except Exception as e:
         print(f"Critical error in /analyze endpoint for URL {url}: {e}")
         return jsonify({"error": "A critical server error occurred"}), 500
 
-# --- 6. Run the Server ---
+# --- 7. Run the Server ---
 if __name__ == "__main__":
     PHISHING_BLOCKLIST = fetch_github_blocklist(GITHUB_TOKEN)
     app.run(debug=True)
