@@ -1,31 +1,38 @@
-// This function updates the HTML of the popup with the analysis results
+// This function updates the enhanced UI of the popup with the analysis results
 function displayResults(data) {
   const statusIcon = document.getElementById("status-icon");
   const statusText = document.getElementById("status-text");
   const probabilitiesDiv = document.getElementById("probabilities");
   const readMoreBtn = document.getElementById("read-more-btn");
   const reasonsDiv = document.getElementById("reasons");
-  document.getElementById("loading").style.display = "none";
+  const reasonsTitle = document.getElementById("reasons-title");
+  const reasonsList = document.getElementById("reasons-list");
 
-  let reasonsHTML = "";
+  // Hide the initial loading text
+  document.getElementById("loading-text").style.display = "none";
+  probabilitiesDiv.style.display = "block";
+
+  let listItemsHTML = "";
 
   if (data.is_phishing) {
-    statusIcon.textContent = "⚠️";
+    statusIcon.src = "icon.png"; // Your shield icon
     statusText.textContent = "Phishing";
     statusText.className = "phishing";
 
     probabilitiesDiv.innerHTML = `<strong>Probability of Phishing:</strong> ${data.prob_phishing}`;
 
+    reasonsTitle.textContent = "Reasoning (Phishing features detected):";
     if (data.is_on_blocklist) {
-      reasonsHTML +=
-        "<strong>❗️ Pre-check Result: PHISHING (Found on GitHub blocklist)</strong><br><br>";
+      listItemsHTML += `<li><strong>Found on live phishing blocklist!</strong></li>`;
     }
-    reasonsHTML += `<strong>Result: Phishing</strong><br><span>Reasoning (Phishing features detected with a value of 1):</span>
-                        <ul>${data.risky_features
-                          .map((f) => `<li>${f}</li>`)
-                          .join("")}</ul>`;
+    data.risky_features.forEach((f) => {
+      listItemsHTML += `<li>${f}</li>`;
+    });
+    if (data.risky_features.length === 0 && !data.is_on_blocklist) {
+      listItemsHTML += `<li>Verdict based on a combination of factors.</li>`;
+    }
   } else {
-    statusIcon.textContent = "✅";
+    statusIcon.src = "icon.png"; // Your shield icon
     statusText.textContent = "Benign";
     statusText.className = "benign";
 
@@ -34,51 +41,57 @@ function displayResults(data) {
             <strong>Probability of Legitimate:</strong> ${data.prob_legitimate}
         `;
 
-    reasonsHTML = `<strong>Result: Benign</strong><br><span>Reasoning (Benign features detected with a value of -1):</span>
-                       <ul>${data.safe_features
-                         .slice(0, 5)
-                         .map((f) => `<li>${f}</li>`)
-                         .join("")}</ul>`;
+    reasonsTitle.textContent = "Reasoning (Benign features confirmed):";
+    data.safe_features.slice(0, 5).forEach((f) => {
+      listItemsHTML += `<li>${f}</li>`;
+    });
+    if (data.safe_features.length === 0) {
+      listItemsHTML += `<li>No significant phishing indicators found.</li>`;
+    }
   }
 
-  reasonsDiv.innerHTML = reasonsHTML;
+  reasonsList.innerHTML = listItemsHTML;
   readMoreBtn.style.display = "block";
+
   readMoreBtn.onclick = () => {
-    reasonsDiv.style.display =
-      reasonsDiv.style.display === "none" ? "block" : "none";
+    const isHidden =
+      reasonsDiv.style.display === "none" || reasonsDiv.style.display === "";
+    reasonsDiv.style.display = isHidden ? "block" : "none";
+    readMoreBtn.textContent = isHidden ? "Hide Details" : "Show Details";
   };
 }
 
 // --- Main execution when popup is opened ---
-chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-  const currentTab = tabs[0];
-  if (currentTab && currentTab.url && currentTab.url.startsWith("http")) {
-    fetch("http://127.0.0.1:5000/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: currentTab.url }),
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        if (data.error) {
-          document.getElementById("status-text").textContent = "Error";
-          document.getElementById(
-            "loading"
-          ).textContent = `Could not analyze page: ${
-            data.details || data.error
-          }`;
-        } else {
-          displayResults(data);
-        }
+document.addEventListener("DOMContentLoaded", () => {
+  chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+    const currentTab = tabs[0];
+    if (currentTab && currentTab.url && currentTab.url.startsWith("http")) {
+      fetch("http://127.0.0.1:5000/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: currentTab.url }),
       })
-      .catch((error) => {
-        document.getElementById("status-text").textContent = "Connection Error";
-        document.getElementById("loading").textContent =
-          "Could not connect to the backend server. Make sure app.py is running.";
-      });
-  } else {
-    document.getElementById("status-text").textContent = "Not a webpage";
-    document.getElementById("loading").textContent =
-      "This extension only works on http/https websites.";
-  }
+        .then((response) => {
+          if (!response.ok)
+            throw new Error(`Server responded with status: ${response.status}`);
+          return response.json();
+        })
+        .then((data) => {
+          if (data.error) throw new Error(data.details || data.error);
+          displayResults(data);
+        })
+        .catch((error) => {
+          document.getElementById("status-text").textContent =
+            "Connection Error";
+          document.getElementById("status-text").className = "loading";
+          document.getElementById("loading-text").textContent =
+            "Could not connect to the backend server. Make sure app.py is running.";
+        });
+    } else {
+      document.getElementById("status-text").textContent = "Not a Webpage";
+      document.getElementById("status-text").className = "loading";
+      document.getElementById("loading-text").textContent =
+        "This extension only works on http/https websites.";
+    }
+  });
 });

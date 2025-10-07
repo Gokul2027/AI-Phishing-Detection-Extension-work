@@ -1,29 +1,142 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <title>AI Phishing Detector</title>
     <style>
-        body { width: 350px; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 15px; background-color: #f9f9f9; }
-        #container { text-align: center; }
-        #status-icon { font-size: 50px; margin-bottom: 10px; }
-        #status-text { font-size: 24px; font-weight: bold; margin: 0; }
+        /* Global Styles */
+        body {
+            width: 350px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            background-color: #f0f2f5;
+            color: #1c1e21;
+        }
+
+        /* Header Section */
+        #header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 20px;
+            background-color: #ffffff;
+            border-bottom: 1px solid #dddfe2;
+        }
+        #header-icon {
+            width: 24px;
+            height: 24px;
+        }
+        #header-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        /* Main Content Container */
+        #container {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* Status Section */
+        #status-icon {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 15px;
+            animation: pop-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        #status-text {
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0;
+        }
         .phishing { color: #d93025; }
         .benign { color: #28a745; }
-        #probabilities { margin-top: 15px; font-size: 14px; color: #555; }
-        #read-more-btn { background: none; border: none; color: #007bff; cursor: pointer; font-size: 14px; margin-top: 15px; padding: 5px; }
-        #reasons { display: none; text-align: left; margin-top: 10px; padding: 10px; border: 1px solid #eee; border-radius: 5px; max-height: 150px; overflow-y: auto; background-color: #fff; }
-        #reasons ul { margin: 0; padding-left: 20px; }
-        #loading { font-style: italic; color: #888; }
+        .loading { color: #606770; }
+
+        #loading-text {
+            font-size: 14px;
+            color: #606770;
+            margin-top: 5px;
+        }
+
+        /* Probabilities Section */
+        #probabilities {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #606770;
+            line-height: 1.5;
+            background-color: #ffffff;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #dddfe2;
+        }
+
+        /* Read More / Details Section */
+        #read-more-btn {
+            background: none;
+            border: none;
+            color: #007bff;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 15px;
+            padding: 8px;
+            font-weight: 600;
+        }
+        #reasons {
+            display: none;
+            text-align: left;
+            margin-top: 10px;
+            padding: 15px;
+            border: 1px solid #dddfe2;
+            border-radius: 8px;
+            max-height: 140px;
+            overflow-y: auto;
+            background-color: #ffffff;
+        }
+        #reasons h3 {
+            font-size: 15px;
+            margin: 0 0 10px 0;
+            color: #1c1e21;
+        }
+        #reasons ul {
+            margin: 0;
+            padding-left: 20px;
+            color: #606770;
+            font-size: 13px;
+        }
+        #reasons li {
+            margin-bottom: 5px;
+        }
+
+        /* Animation Keyframes */
+        @keyframes pop-in {
+            0% { transform: scale(0.5); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
     </style>
 </head>
 <body>
-    <div id="container">
-        <div id="status-icon"></div>
-        <h1 id="status-text">Analyzing...</h1>
-        <p id="loading">Getting analysis from the local server...</p>
-        <div id="probabilities"></div>
-        <button id="read-more-btn" style="display: none;">Read More...</button>
-        <div id="reasons"></div>
+
+    <div id="header">
+        <img id="header-icon" src="icon.png" alt="Detector Icon">
+        <h2 id="header-title">AI Phishing Detector</h2>
     </div>
+
+    <div id="container">
+        <img id="status-icon" src="icon.png" alt="Status">
+        <h1 id="status-text" class="loading">Analyzing...</h1>
+        <p id="loading-text">Getting analysis from the local server...</p>
+        
+        <div id="probabilities" style="display: none;"></div>
+        
+        <button id="read-more-btn" style="display: none;">Show Details</button>
+        <div id="reasons">
+            <h3 id="reasons-title"></h3>
+            <ul id="reasons-list"></ul>
+        </div>
+    </div>
+
     <script src="popup.js"></script>
 </body>
 </html>
